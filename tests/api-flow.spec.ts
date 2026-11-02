@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 
 const health = { status: 'ok', translation_model_loaded: true, transcription_model_loaded: false }
 const capabilities = { upload: { allowed_extensions: ['.wav', '.mp4'], max_upload_bytes: 1073741824, max_duration_seconds: 5400, supported_languages: ['en'] } }
-const status = (overrides = {}) => ({ job_id: 'job-test', status: 'running', stage: 'transcribing', progress_percent: null, completed_segments: 0, total_segments: null, failed_segments: 0, elapsed_seconds: 12, expires_at: null, ...overrides })
+const status = (overrides = {}) => ({ job_id: 'job-test', updated_at: new Date().toISOString(), status: 'running', stage: 'transcribing', progress_percent: null, completed_segments: 0, total_segments: null, failed_segments: 0, elapsed_seconds: 12, expires_at: null, ...overrides })
 const result = { segments: [
   { start: 0, end: 1.5, text: 'The velocity is constant.', translation: '속도는 일정합니다.', translation_error: null },
   { start: 1.5, end: 3, text: 'The net force is zero.', translation: null, translation_error: 'translation_failed' },
@@ -57,8 +57,7 @@ test('upload, nullable progress, partial results, seek, mode, download and resto
   await page.getByRole('button', { name: 'SRT 다운로드' }).click()
   expect((await download).suggestedFilename()).toBe('captions-en.srt')
   await page.reload()
-  await expect(page.getByText('재생하려면 동일한 원본 파일', { exact: false })).toBeVisible()
-  await page.locator('input[type=file]').setInputFiles(wav())
+  await expect(page.getByText('저장된 원본을 복원했습니다.', { exact: false })).toBeVisible()
   await expect(page.locator('audio')).toHaveCount(1)
 })
 

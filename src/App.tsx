@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent, KeyboardEvent } from 'react'
 import { jobApiAdapter as api, ApiError } from './api/jobApiAdapter'
+import { saveMedia, loadMedia, syncMediaJob, maintainMediaCache, removeMedia } from './storage/mediaCache'
 import type { CaptionMode, JobView, SubtitleSegment, UploadCapabilities, HealthResponse } from './types'
 
 type Screen = 'upload' | 'processing' | 'error' | 'watch'
-type SelectedMedia = { file: File; url: string; duration: number | null; isAudio: boolean }
+type SelectedMedia = { file: File; url: string; duration: number | null; isAudio: boolean; cacheJobId?: string }
 type ErrorInfo = { title: string; detail: string }
 
 const stages = [
@@ -201,7 +202,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   }
   return <main className="watch-page">
     <div className="watch-toolbar"><div><h1>{selected?.file.name ?? savedJob?.fileName ?? '처리된 강의'}</h1><p>로컬 파일 재생 · 서버 생성 자막</p></div><ModeSwitch mode={mode} setMode={setMode} className="desktop-mode" /><button className="outline" onClick={onReset}>새 파일 올리기</button></div>
-    <div className="download-toolbar"><span>{job.failedSegments > 0 ? `일부 번역 실패 ${job.failedSegments}개 · 해당 구간은 영어 원문을 표시합니다.` : '자막 처리 완료'}{job.expiresAt && ` · 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span><button className="outline" disabled={downloadBusy} onClick={() => download('srt')}>SRT 다운로드</button><button className="outline" disabled={downloadBusy} onClick={() => download('vtt')}>VTT 다운로드</button></div>
+    <div className="download-toolbar"><span>{job.failedSegments > 0 ? `일부 번역 실패 ${job.failedSegments}개 · 해당 구간은 영어 원문을 표시합니다.` : '자막 처리 완료'}{job.expiresAt && ` · 서버 자막 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span><button className="outline" disabled={downloadBusy} onClick={() => download('srt')}>SRT 다운로드</button><button className="outline" disabled={downloadBusy} onClick={() => download('vtt')}>VTT 다운로드</button></div>
     {downloadError && <p className="media-warning" role="alert">{downloadError}</p>}
     <div className="watch-layout">
       <section className="player-column" aria-label="미디어 재생">
@@ -245,10 +246,32 @@ export default function App() {
   const [capabilities, setCapabilities] = useState<UploadCapabilities | null>(null)
   const [serverError, setServerError] = useState('')
   const [serverRetry, setServerRetry] = useState(0)
+  const [cacheNotice, setCacheNotice] = useState('')
   const selectedRef = useRef<SelectedMedia | null>(null)
   const generation = useRef(0)
 
   useEffect(() => () => { if (selectedRef.current) URL.revokeObjectURL(selectedRef.current.url) }, [])
+  useEffect(() => maintainMediaCache(
+    id => {
+      if (selectedRef.current?.cacheJobId === id) {
+        URL.revokeObjectURL(selectedRef.current.url)
+        selectedRef.current = null; setSelected(null)
+        setCacheNotice('보관 시간이 끝났거나 작업이 종료되어 저장된 원본을 삭제했습니다. 자막은 계속 확인할 수 있습니다.')
+      }
+    },
+    () => setCacheNotice('브라우저 저장소에 접근하지 못했습니다. 저장·자동 삭제를 확인할 수 없습니다.'),
+  ), [])
+  const cacheFile = async (nextJob: JobView, media: SelectedMedia): Promise<SelectedMedia> => {
+    try {
+      const stored = await saveMedia(nextJob, { file: media.file, duration: media.duration, isAudio: media.isAudio })
+      setCacheNotice(stored ? '원본을 브라우저에 저장했습니다. 마지막 K-aption 탭을 닫은 뒤 30분이 지나면 다음 접속 시 삭제됩니다.' : '이 작업의 원본은 저장하지 않았습니다. 현재 탭에서만 재생합니다.')
+      return stored ? { ...media, cacheJobId: nextJob.id } : media
+    } catch {
+      setCacheNotice('저장 공간 부족 또는 브라우저 설정으로 원본을 저장하지 못했습니다. 새로고침하면 원본을 다시 선택해야 합니다.')
+      return media
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController()
     setServerError('')
@@ -279,7 +302,9 @@ export default function App() {
     if (duration !== null && duration > capabilities.max_duration_seconds) { fail('강의 길이를 확인해 주세요', `최대 ${capabilities.max_duration_seconds / 60}분까지 지원합니다.`); return }
     if (selectedRef.current) URL.revokeObjectURL(selectedRef.current.url)
     const next = { file, url: URL.createObjectURL(file), duration, isAudio: ['.mp3', '.wav', '.m4a'].includes(extension) }
-    selectedRef.current = next; setSelected(next); setBusy(false)
+    const media = screen === 'watch' && job ? await cacheFile(job, next) : next
+    if (token !== generation.current) { URL.revokeObjectURL(next.url); return }
+    selectedRef.current = media; setSelected(media); setBusy(false)
   }
   const start = async () => {
     if (!selected || busy || uploading || !capabilities) return
@@ -289,7 +314,11 @@ export default function App() {
       const next = await api.submitLecture(selected.file)
       if (token !== generation.current) return
       const saved = { id: next.id, fileName: selected.file.name, fileSize: selected.file.size }
-      storeJob(saved); setSavedJob(saved); setJob(next); setJobId(next.id)
+      storeJob(saved); setSavedJob(saved)
+      const media = await cacheFile(next, selected)
+      if (token !== generation.current) return
+      selectedRef.current = media; setSelected(media)
+      setJob(next); setJobId(next.id)
     } catch (error) {
       if (token === generation.current) fail('작업 접수를 확인하지 못했어요', `${messageOf(error)} 연결이 끊긴 경우 서버에서 이미 접수했을 수도 있으므로 자동 재전송하지 않습니다.`)
     } finally { setUploading(false) }
@@ -303,6 +332,18 @@ export default function App() {
         const next = await api.getJob(jobId, controller.signal)
         if (controller.signal.aborted) return
         setJob(next); setIssue('')
+        try {
+          await syncMediaJob(next)
+          if (!controller.signal.aborted && !selectedRef.current && next.status !== 'failed' && next.status !== 'cancelled') {
+            const cached = await loadMedia(jobId)
+            if (cached && !controller.signal.aborted && !selectedRef.current) {
+              const media = { ...cached, url: URL.createObjectURL(cached.file), cacheJobId: jobId }
+              selectedRef.current = media; setSelected(media)
+              setCacheNotice('저장된 원본을 복원했습니다. 마지막 K-aption 탭을 닫은 뒤 30분이 지나면 다음 접속 시 삭제됩니다.')
+            }
+          }
+        } catch (error) { if (!controller.signal.aborted) setCacheNotice(messageOf(error)) }
+        if (controller.signal.aborted) return
         if (next.status === 'failed' || next.status === 'cancelled') {
           fail(next.status === 'cancelled' ? '작업을 취소했어요' : '자막을 만들지 못했어요', next.error?.message ?? '다른 파일을 올리거나 다시 시도해 주세요.')
           return
@@ -320,6 +361,7 @@ export default function App() {
       } catch (error) {
         if (controller.signal.aborted) return
         if (error instanceof ApiError && error.status === 404) {
+          void removeMedia(jobId).catch(() => {})
           storeJob(null); setSavedJob(null); fail('작업을 찾을 수 없어요', messageOf(error))
         } else setIssue(messageOf(error))
       }
@@ -349,7 +391,8 @@ export default function App() {
   return <div className="app-shell">
     <header className="site-header"><Logo onHome={reset} disabled={uploading} /><span className="demo-badge" role="status">{serverError ? '서버 연결 오류' : health ? `서버 연결됨 · 번역 모델 ${health.translation_model_loaded ? '준비됨' : '대기 중'}` : '서버 확인 중…'}</span></header>
     {serverError && <div className="connection-warning" role="alert"><p>{serverError}</p><button className="outline" onClick={() => setServerRetry(value => value + 1)}>서버 다시 확인</button></div>}
-    {health && <p className="server-note">음성 인식 모델: {health.transcription_model_loaded ? '로드됨' : '첫 요청 시 준비'} · 원본 파일은 재생을 위해 현재 탭에 유지됩니다.</p>}
+    {health && <p className="server-note">음성 인식 모델: {health.transcription_model_loaded ? '로드됨' : '첫 요청 시 준비'} · 원본은 마지막 K-aption 탭을 닫은 뒤 30분 동안 보관합니다.</p>}
+    {cacheNotice && <p className="server-note" role="status">{cacheNotice}</p>}
     {screen === 'upload' && <UploadPage selected={selected} onSelect={selectFile} onStart={start} busy={busy} capabilities={capabilities} savedJob={savedJob} onResume={resume} />}
     {screen === 'processing' && <ProcessingPage job={job} uploading={uploading} issue={issue} cancelling={cancelling} onCancel={cancel} onRetry={() => setRetry(value => value + 1)} />}
     {screen === 'error' && <ErrorPage error={error} onReset={reset} />}
