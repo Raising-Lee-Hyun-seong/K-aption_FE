@@ -148,6 +148,14 @@ function ModeSwitch({ mode, setMode, className = '' }: { mode: CaptionMode; setM
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
 
+function Icon({ name }: { name: 'volume' | 'muted' }) {
+  const paths = {
+    volume: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" /></>,
+    muted: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" /></>,
+  }
+  return <svg className="control-icon" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="currentColor">{paths[name]}</svg>
+}
+
 function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   selected: SelectedMedia | null; segments: SubtitleSegment[]; job: JobView; savedJob: SavedJob | null
   onSelect: (file: File) => void; onReset: () => void
@@ -161,6 +169,8 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   const [playing, setPlaying] = useState(false)
   const [mediaError, setMediaError] = useState(false)
   const [rate, setRate] = useState(1)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState('')
   useEffect(() => { setMediaError(false); setCurrent(0); setPlaying(false); setDuration(selected?.duration ?? 0) }, [selected])
@@ -194,6 +204,18 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     if (media.paused) { try { await media.play() } catch { setMediaError(true) } }
     else media.pause()
   }
+  const changeVolume = (next: number) => {
+    const media = mediaRef.current
+    setVolume(next); setMuted(next === 0)
+    if (media) { media.volume = next; media.muted = next === 0 }
+  }
+  const toggleMute = () => {
+    const media = mediaRef.current
+    const next = !muted
+    setMuted(next)
+    if (media) media.muted = next
+    if (!next && volume === 0) changeVolume(0.5)
+  }
 
   const mediaProps = {
     ref: mediaRef,
@@ -204,7 +226,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
       const media = mediaRef.current
       if (!media) return
       setDuration(media.duration || 0)
-      media.playbackRate = rate
+      media.playbackRate = rate; media.volume = volume; media.muted = muted
     },
     onPlay: () => setPlaying(true),
     onPause: () => setPlaying(false),
@@ -226,6 +248,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
         <div className="playback-controls"><button className="play-control" onClick={togglePlay} disabled={controlsDisabled} aria-label={playing ? '일시정지' : '재생'}>{playing ? 'Ⅱ' : '▶'}</button><label className="sr-only" htmlFor="seek">재생 위치</label><input id="seek" type="range" min="0" max={duration || 1} step="0.1" value={Math.min(current, duration || 1)} onChange={(event) => seek(Number(event.target.value))} disabled={controlsDisabled} /><span className="time-readout">{formatTime(current)} / {formatTime(duration)}</span></div>
         <div className="playback-extras">
           <label className="speed-control">배속<select value={rate} onChange={event => setRate(Number(event.target.value))} disabled={controlsDisabled}>{SPEEDS.map(speed => <option key={speed} value={speed}>{speed}x</option>)}</select></label>
+          <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
         </div>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}

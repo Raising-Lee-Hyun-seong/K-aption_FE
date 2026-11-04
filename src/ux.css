@@ -10,4 +10,12 @@
 .playback-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 0 4px; }
 .speed-control { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #4d5260; }
 .speed-control select { height: 40px; padding: 0 10px; border: 1px solid #babdc5; border-radius: 8px; background: #fff; color: #343943; }
+.volume-control { display: inline-flex; align-items: center; gap: 6px; }
+.volume-control input[type=range] { width: 110px; accent-color: var(--brand); cursor: pointer; }
+.icon-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--brand); }
+.icon-button:not(:disabled):hover { background: #eef1ff; }
+.control-icon { width: 22px; height: 22px; }
 
+@media (max-width: 520px) {
+  .volume-control input[type=range] { width: 80px; }
+}
