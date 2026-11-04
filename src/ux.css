@@ -5,3 +5,9 @@
 .pick-hint { display: inline-flex; align-items: center; margin-top: 18px; padding: 10px 20px; border: 1px solid var(--brand); border-radius: 10px; color: var(--brand); font-size: 15px; font-weight: 700; background: #fff; }
 .dropzone:hover .pick-hint { background: #f4f6ff; }
 
+/* 재생 컨트롤 두 번째 줄: 배속·음량·전체화면·자막 목록 토글 */
+.playback-controls { padding-bottom: 8px; }
+.playback-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 0 4px; }
+.speed-control { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #4d5260; }
+.speed-control select { height: 40px; padding: 0 10px; border: 1px solid #babdc5; border-radius: 8px; background: #fff; color: #343943; }
+

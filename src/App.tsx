@@ -146,6 +146,8 @@ function ModeSwitch({ mode, setMode, className = '' }: { mode: CaptionMode; setM
   return <div className={`mode-switch ${className}`} role="group" aria-label="자막 언어">{([['ko', '한국어'], ['en', 'English'], ['both', '한·영']] as const).map(([value, label]) => <button key={value} aria-pressed={mode === value} className={mode === value ? 'selected' : ''} onClick={() => setMode(value)}>{label}</button>)}</div>
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
+
 function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   selected: SelectedMedia | null; segments: SubtitleSegment[]; job: JobView; savedJob: SavedJob | null
   onSelect: (file: File) => void; onReset: () => void
@@ -158,9 +160,11 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   const [duration, setDuration] = useState(selected?.duration ?? 0)
   const [playing, setPlaying] = useState(false)
   const [mediaError, setMediaError] = useState(false)
+  const [rate, setRate] = useState(1)
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState('')
   useEffect(() => { setMediaError(false); setCurrent(0); setPlaying(false); setDuration(selected?.duration ?? 0) }, [selected])
+  useEffect(() => { if (mediaRef.current) mediaRef.current.playbackRate = rate }, [rate])
   const download = async (format: 'srt' | 'vtt') => {
     setDownloadBusy(true); setDownloadError('')
     try {
@@ -196,11 +200,17 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     src: selected?.url,
     preload: 'metadata' as const,
     onTimeUpdate: () => setCurrent(mediaRef.current?.currentTime ?? 0),
-    onLoadedMetadata: () => setDuration(mediaRef.current?.duration ?? 0),
+    onLoadedMetadata: () => {
+      const media = mediaRef.current
+      if (!media) return
+      setDuration(media.duration || 0)
+      media.playbackRate = rate
+    },
     onPlay: () => setPlaying(true),
     onPause: () => setPlaying(false),
     onError: () => setMediaError(true),
   }
+  const controlsDisabled = mediaError || !selected
   return <main className="watch-page">
     <div className="watch-toolbar"><div><h1>{selected?.file.name ?? savedJob?.fileName ?? '처리된 강의'}</h1><p>로컬 파일 재생 · 서버 생성 자막</p></div><ModeSwitch mode={mode} setMode={setMode} className="desktop-mode" /><button className="outline" onClick={onReset}>새 파일 올리기</button></div>
     <div className="download-toolbar"><span>{job.failedSegments > 0 ? `일부 번역 실패 ${job.failedSegments}개 · 해당 구간은 영어 원문을 표시합니다.` : '자막 처리 완료'}{job.expiresAt && ` · 서버 자막 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span><button className="outline" disabled={downloadBusy} onClick={() => download('srt')}>SRT 다운로드</button><button className="outline" disabled={downloadBusy} onClick={() => download('vtt')}>VTT 다운로드</button></div>
@@ -213,7 +223,10 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
           {selected && active && !mediaError && <div className="caption-overlay" aria-live="off"><CaptionText segment={active} mode={mode} />{statusLabel(active.status) && <small className="overlay-status">{statusLabel(active.status)}</small>}</div>}
         </div>
         {mediaError && <p className="media-warning" role="alert">이 브라우저에서 파일을 재생할 수 없어요. 파일 형식 또는 코덱을 확인해 주세요. 자막 목록은 살펴볼 수 있습니다.</p>}
-        <div className="playback-controls"><button className="play-control" onClick={togglePlay} disabled={mediaError || !selected} aria-label={playing ? '일시정지' : '재생'}>{playing ? 'Ⅱ' : '▶'}</button><label className="sr-only" htmlFor="seek">재생 위치</label><input id="seek" type="range" min="0" max={duration || 1} step="0.1" value={Math.min(current, duration || 1)} onChange={(event) => seek(Number(event.target.value))} disabled={mediaError || !selected} /><span className="time-readout">{formatTime(current)} / {formatTime(duration)}</span></div>
+        <div className="playback-controls"><button className="play-control" onClick={togglePlay} disabled={controlsDisabled} aria-label={playing ? '일시정지' : '재생'}>{playing ? 'Ⅱ' : '▶'}</button><label className="sr-only" htmlFor="seek">재생 위치</label><input id="seek" type="range" min="0" max={duration || 1} step="0.1" value={Math.min(current, duration || 1)} onChange={(event) => seek(Number(event.target.value))} disabled={controlsDisabled} /><span className="time-readout">{formatTime(current)} / {formatTime(duration)}</span></div>
+        <div className="playback-extras">
+          <label className="speed-control">배속<select value={rate} onChange={event => setRate(Number(event.target.value))} disabled={controlsDisabled}>{SPEEDS.map(speed => <option key={speed} value={speed}>{speed}x</option>)}</select></label>
+        </div>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}
       </section>
