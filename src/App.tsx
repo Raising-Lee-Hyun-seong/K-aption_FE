@@ -148,10 +148,12 @@ function ModeSwitch({ mode, setMode, className = '' }: { mode: CaptionMode; setM
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
 
-function Icon({ name }: { name: 'volume' | 'muted' }) {
+function Icon({ name }: { name: 'volume' | 'muted' | 'expand' | 'shrink' }) {
   const paths = {
     volume: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" /></>,
     muted: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" /></>,
+    expand: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" />,
+    shrink: <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" />,
   }
   return <svg className="control-icon" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="currentColor">{paths[name]}</svg>
 }
@@ -161,6 +163,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   onSelect: (file: File) => void; onReset: () => void
 }) {
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const manualScrollUntil = useRef(0)
   const [mode, setMode] = useState<CaptionMode>('ko')
@@ -171,10 +174,16 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   const [rate, setRate] = useState(1)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState('')
   useEffect(() => { setMediaError(false); setCurrent(0); setPlaying(false); setDuration(selected?.duration ?? 0) }, [selected])
   useEffect(() => { if (mediaRef.current) mediaRef.current.playbackRate = rate }, [rate])
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null && document.fullscreenElement === frameRef.current)
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
   const download = async (format: 'srt' | 'vtt') => {
     setDownloadBusy(true); setDownloadError('')
     try {
@@ -216,6 +225,12 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     if (media) media.muted = next
     if (!next && volume === 0) changeVolume(0.5)
   }
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+      else await frameRef.current?.requestFullscreen()
+    } catch { /* The browser may refuse fullscreen; playback continues. */ }
+  }
 
   const mediaProps = {
     ref: mediaRef,
@@ -239,8 +254,8 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     {downloadError && <p className="media-warning" role="alert">{downloadError}</p>}
     <div className="watch-layout">
       <section className="player-column" aria-label="미디어 재생">
-        <div className={`player-frame ${selected?.isAudio ? 'audio-frame' : ''}`}>
-          {!selected ? <div className="missing-media"><p>자막 결과를 불러왔습니다. 재생하려면 동일한 원본 파일을 다시 선택해 주세요.</p><label>원본 파일 선택<input type="file" onChange={event => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} /></label></div> : selected.isAudio ? <><div className="audio-art" aria-hidden="true">♫</div><audio {...mediaProps} /></> : <video {...mediaProps} playsInline onClick={togglePlay} />}
+        <div ref={frameRef} className={`player-frame ${selected?.isAudio ? 'audio-frame' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
+          {!selected ? <div className="missing-media"><p>자막 결과를 불러왔습니다. 재생하려면 동일한 원본 파일을 다시 선택해 주세요.</p><label>원본 파일 선택<input type="file" onChange={event => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} /></label></div> : selected.isAudio ? <><div className="audio-art" aria-hidden="true">♫</div><audio {...mediaProps} /></> : <video {...mediaProps} playsInline onClick={togglePlay} onDoubleClick={toggleFullscreen} />}
           {selected && !playing && !mediaError && <button className="center-play" onClick={togglePlay} aria-label="재생">▶</button>}
           {selected && active && !mediaError && <div className="caption-overlay" aria-live="off"><CaptionText segment={active} mode={mode} />{statusLabel(active.status) && <small className="overlay-status">{statusLabel(active.status)}</small>}</div>}
         </div>
@@ -249,6 +264,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
         <div className="playback-extras">
           <label className="speed-control">배속<select value={rate} onChange={event => setRate(Number(event.target.value))} disabled={controlsDisabled}>{SPEEDS.map(speed => <option key={speed} value={speed}>{speed}x</option>)}</select></label>
           <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
+          {selected && !selected.isAudio && document.fullscreenEnabled && <button type="button" className="icon-button" onClick={toggleFullscreen} disabled={controlsDisabled} aria-label={fullscreen ? '전체화면 종료' : '전체화면'}><Icon name={fullscreen ? 'shrink' : 'expand'} /></button>}
         </div>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}

@@ -16,6 +16,11 @@
 .icon-button:not(:disabled):hover { background: #eef1ff; }
 .control-icon { width: 22px; height: 22px; }
 
+/* 전체화면에서도 자막 오버레이가 영상 위에 남도록 영상이 아니라 프레임을 전체화면으로 연다. */
+.player-frame:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
+.player-frame:fullscreen video { background: #000; }
+.player-frame:fullscreen .caption-overlay > span { font-size: clamp(20px, 2.4vw, 34px); }
+
 @media (max-width: 520px) {
   .volume-control input[type=range] { width: 80px; }
 }
