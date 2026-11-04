@@ -15,12 +15,18 @@
 .icon-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--brand); }
 .icon-button:not(:disabled):hover { background: #eef1ff; }
 .control-icon { width: 22px; height: 22px; }
+.list-toggle { margin-left: auto; min-height: 40px; padding: 0 14px; border: 1px solid #babcc2; border-radius: 10px; background: #fff; color: #353942; font-weight: 700; }
+.list-toggle[aria-pressed=false] { border-color: var(--brand); color: var(--brand); }
 .shortcut-hint { margin: 10px 4px 0; color: var(--muted); font-size: 13px; }
 
 /* 전체화면에서도 자막 오버레이가 영상 위에 남도록 영상이 아니라 프레임을 전체화면으로 연다. */
 .player-frame:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
 .player-frame:fullscreen video { background: #000; }
 .player-frame:fullscreen .caption-overlay > span { font-size: clamp(20px, 2.4vw, 34px); }
+
+/* 자막 목록을 숨기면 영상이 전체 폭을 쓴다. */
+.watch-layout.list-hidden { grid-template-columns: 1fr; }
+.watch-layout.list-hidden .player-column { max-width: 1100px; width: 100%; margin: 0 auto; }
 
 /* 자막 다운로드: 플레이어 아래, 버튼 하나에서 언어·형식 선택 */
 .download-area { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #e5e7ec; }
@@ -36,6 +42,7 @@
 .download-panel > .primary { width: 100%; min-height: 46px; }
 
 @media (max-width: 800px) {
+  .list-toggle { margin-left: 0; }
   .download-panel { position: static; width: 100%; margin-top: 10px; }
   .download-menu { width: 100%; }
   .download-menu > .outline { width: 100%; }
