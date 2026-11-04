@@ -159,6 +159,13 @@ function readListPreference() {
   try { return localStorage.getItem(LIST_KEY) !== 'hidden' } catch { return true }
 }
 
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return <>{parts.map((part, index) => part.toLowerCase() === query.toLowerCase() ? <mark key={index}>{part}</mark> : part)}</>
+}
+
 function Icon({ name }: { name: 'volume' | 'muted' | 'expand' | 'shrink' }) {
   const paths = {
     volume: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" /></>,
@@ -187,6 +194,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [showList, setShowList] = useState(readListPreference)
+  const [query, setQuery] = useState('')
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [downloadLanguage, setDownloadLanguage] = useState<CaptionMode>('ko')
   const [downloadFormat, setDownloadFormat] = useState<'srt' | 'vtt'>('srt')
@@ -222,6 +230,9 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   }
   const active = segments.find((segment) => segment.startMs <= current * 1000 && current * 1000 < segment.endMs)
   const activeId = active?.id
+  const search = query.trim()
+  const lowered = search.toLowerCase()
+  const visible = lowered ? segments.filter(segment => segment.sourceText.toLowerCase().includes(lowered) || (segment.targetText ?? '').toLowerCase().includes(lowered)) : segments
 
   useEffect(() => {
     if (activeId && Date.now() > manualScrollUntil.current) cardRefs.current[activeId]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -331,15 +342,19 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
         {downloadError && <p className="media-warning" role="alert">{downloadError}</p>}
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}
       </section>
-      {showList && <aside className="segment-panel" aria-label="자막 목록"><div className="panel-heading"><h2>자막 목록</h2><span>{segments.length}개 구간</span></div>{segments.length ? <div className="segment-scroll" onWheel={() => { manualScrollUntil.current = Date.now() + 3000 }} onTouchMove={() => { manualScrollUntil.current = Date.now() + 3000 }} onPointerDown={() => { manualScrollUntil.current = Date.now() + 3000 }} onKeyDown={() => { manualScrollUntil.current = Date.now() + 3000 }}>{segments.map((segment) => <button key={segment.id} ref={(node) => { cardRefs.current[segment.id] = node }} className={`segment-card ${segment.id === activeId ? 'current' : ''}`} disabled={!selected || mediaError} onClick={() => seek(Math.min(segment.startMs / 1000, duration))} aria-current={segment.id === activeId ? 'true' : undefined}><span className="segment-language-box source-box" lang="en">
+      {showList && <aside className="segment-panel" aria-label="자막 목록">
+        <div className="panel-heading"><h2>자막 목록</h2><span>{search ? `${visible.length}/${segments.length}개 구간` : `${segments.length}개 구간`}</span></div>
+        {segments.length > 0 && <div className="segment-search"><label className="sr-only" htmlFor="segment-search">자막 검색</label><input id="segment-search" type="search" placeholder="자막 검색 (영어·한국어)" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setQuery('') }} /></div>}
+        {segments.length === 0 ? <p className="panel-empty">인식된 자막 구간이 없습니다.</p> : visible.length === 0 ? <p className="panel-empty">'{search}'이(가) 들어간 자막이 없어요.</p> : <div className="segment-scroll" onWheel={() => { manualScrollUntil.current = Date.now() + 3000 }} onTouchMove={() => { manualScrollUntil.current = Date.now() + 3000 }} onPointerDown={() => { manualScrollUntil.current = Date.now() + 3000 }} onKeyDown={() => { manualScrollUntil.current = Date.now() + 3000 }}>{visible.map((segment) => <button key={segment.id} ref={(node) => { cardRefs.current[segment.id] = node }} className={`segment-card ${segment.id === activeId ? 'current' : ''}`} disabled={!selected || mediaError} onClick={() => seek(Math.min(segment.startMs / 1000, duration))} aria-current={segment.id === activeId ? 'true' : undefined}><span className="segment-language-box source-box" lang="en">
           <span className="segment-box-heading"><span className="segment-time">{formatTime(segment.startMs / 1000)}</span><span>English</span></span>
-          <span className="segment-source">{segment.sourceText}</span>
+          <span className="segment-source"><Highlight text={segment.sourceText} query={search} /></span>
         </span>
         <span className="segment-language-box translation-box" lang={segment.targetText ? 'ko' : 'en'}>
           <span className="segment-box-heading">{segment.targetText ? '한국어 번역' : '영어 원문 유지'}</span>
-          <span className="segment-target">{segment.targetText ?? segment.sourceText}</span>
+          <span className="segment-target"><Highlight text={segment.targetText ?? segment.sourceText} query={search} /></span>
           {statusLabel(segment.status) && <span className={`status-pill ${segment.status}`}>{statusLabel(segment.status)}</span>}
-        </span></button>)}</div> : <p className="panel-empty">인식된 자막 구간이 없습니다.</p>}</aside>}
+        </span></button>)}</div>}
+      </aside>}
     </div>
   </main>
 }
