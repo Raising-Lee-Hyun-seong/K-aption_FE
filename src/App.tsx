@@ -314,6 +314,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
         <div ref={frameRef} className={`player-frame ${selected?.isAudio ? 'audio-frame' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
           {!selected ? <div className="missing-media"><p>자막 결과를 불러왔습니다. 재생하려면 동일한 원본 파일을 다시 선택해 주세요.</p><label>원본 파일 선택<input type="file" onChange={event => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} /></label></div> : selected.isAudio ? <><div className="audio-art" aria-hidden="true">♫</div><audio {...mediaProps} /></> : <video {...mediaProps} playsInline onClick={togglePlay} onDoubleClick={toggleFullscreen} />}
           {selected && !playing && !mediaError && <button className="center-play" onClick={togglePlay} aria-label="재생">▶</button>}
+          {selected && !selected.isAudio && !mediaError && document.fullscreenEnabled && <button type="button" className="fullscreen-button" onClick={toggleFullscreen} aria-label={fullscreen ? '전체화면 종료' : '전체화면'} title={fullscreen ? '전체화면 종료 (Esc)' : '전체화면'}><Icon name={fullscreen ? 'shrink' : 'expand'} /></button>}
           {selected && active && !mediaError && <div className="caption-overlay" aria-live="off"><CaptionText segment={active} mode={mode} />{statusLabel(active.status) && <small className="overlay-status">{statusLabel(active.status)}</small>}</div>}
         </div>
         {mediaError && <p className="media-warning" role="alert">이 브라우저에서 파일을 재생할 수 없어요. 파일 형식 또는 코덱을 확인해 주세요. 자막 목록은 살펴볼 수 있습니다.</p>}
@@ -321,7 +322,6 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
         <div className="playback-extras">
           <label className="speed-control">배속<select value={rate} onChange={event => setRate(Number(event.target.value))} disabled={controlsDisabled}>{SPEEDS.map(speed => <option key={speed} value={speed}>{speed}x</option>)}</select></label>
           <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
-          {selected && !selected.isAudio && document.fullscreenEnabled && <button type="button" className="icon-button" onClick={toggleFullscreen} disabled={controlsDisabled} aria-label={fullscreen ? '전체화면 종료' : '전체화면'}><Icon name={fullscreen ? 'shrink' : 'expand'} /></button>}
           <button type="button" className="list-toggle" aria-pressed={showList} onClick={toggleList}>{showList ? '자막 목록 숨기기' : '자막 목록 보기'}</button>
         </div>
         <p className="shortcut-hint">단축키 · Space 재생/일시정지 · ←/→ {SEEK_STEP}초 이동</p>
