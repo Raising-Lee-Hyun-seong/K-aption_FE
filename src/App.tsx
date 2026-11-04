@@ -90,8 +90,8 @@ function UploadPage({ selected, onSelect, onStart, busy, capabilities, savedJob,
     <div className="upload-stack">
       <div className={`dropzone ${dragging ? 'is-dragging' : ''}`} role="button" tabIndex={0} aria-label="강의 파일 선택 또는 드래그 앤 드롭" onClick={pick} onKeyDown={handleKey} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDragging(false) }} onDrop={receive}>
         <div className="icon-tile"><UploadIcon /></div>
-        <h1>{selected ? '선택한 강의 파일' : '영상을 드래그해서 올려주세요'}</h1>
-        {selected ? <><strong className="file-name">{selected.file.name}</strong><p>{selected.duration === null ? '길이 확인 불가 · 서버에서 검사' : formatTime(selected.duration)} · {(selected.file.size / 1024 / 1024).toFixed(1)} MB</p><span className="text-link">다른 파일 선택</span></> : <p>{capabilities ? `${capabilities.allowed_extensions.join(' · ')} / 최대 ${capabilities.max_duration_seconds / 60}분 · ${(capabilities.max_upload_bytes / 1024 ** 3).toFixed(1)} GiB` : '서버 업로드 규칙을 확인해 주세요'}</p>}
+        <h1>{selected ? '선택한 강의 파일' : '영상을 끌어다 놓거나 클릭해서 선택하세요'}</h1>
+        {selected ? <><strong className="file-name">{selected.file.name}</strong><p>{selected.duration === null ? '길이 확인 불가 · 서버에서 검사' : formatTime(selected.duration)} · {(selected.file.size / 1024 / 1024).toFixed(1)} MB</p><span className="text-link">다른 파일 선택</span></> : <><p>{capabilities ? `${capabilities.allowed_extensions.join(' · ')} / 최대 ${capabilities.max_duration_seconds / 60}분 · ${(capabilities.max_upload_bytes / 1024 ** 3).toFixed(1)} GiB` : '서버 업로드 규칙을 확인해 주세요'}</p>{capabilities && <span className="pick-hint" aria-hidden="true">파일 선택</span>}</>}
       </div>
       <input ref={inputRef} className="sr-only" type="file" disabled={busy || !capabilities} accept={capabilities?.allowed_extensions.join(',')} onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} />
       {selected?.duration === null && <p className="inline-note" role="status">브라우저가 재생 길이를 읽지 못했습니다. 서버에서 길이와 음성을 검증합니다.</p>}
@@ -190,6 +190,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     if (media.paused) { try { await media.play() } catch { setMediaError(true) } }
     else media.pause()
   }
+
   const mediaProps = {
     ref: mediaRef,
     src: selected?.url,
