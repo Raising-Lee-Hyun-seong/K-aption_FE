@@ -147,6 +147,7 @@ function ModeSwitch({ mode, setMode, className = '' }: { mode: CaptionMode; setM
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
+const SEEK_STEP = 5
 
 function Icon({ name }: { name: 'volume' | 'muted' | 'expand' | 'shrink' }) {
   const paths = {
@@ -205,7 +206,9 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
 
   const seek = (seconds: number) => {
     const media = mediaRef.current
-    if (media) { media.currentTime = seconds; setCurrent(seconds) }
+    if (!media) return
+    const target = Math.max(0, Math.min(seconds, duration || seconds))
+    media.currentTime = target; setCurrent(target)
   }
   const togglePlay = async () => {
     const media = mediaRef.current
@@ -231,6 +234,27 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
       else await frameRef.current?.requestFullscreen()
     } catch { /* The browser may refuse fullscreen; playback continues. */ }
   }
+
+  // Keyboard shortcuts stay out of the way while typing or using form controls.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (!selected || mediaError) return
+      if (event.key === ' ') {
+        if (target?.closest('button')) return
+        event.preventDefault(); void togglePlay()
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const media = mediaRef.current
+        if (!media) return
+        event.preventDefault()
+        seek(media.currentTime + (event.key === 'ArrowRight' ? SEEK_STEP : -SEEK_STEP))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const mediaProps = {
     ref: mediaRef,
@@ -266,6 +290,7 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
           <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
           {selected && !selected.isAudio && document.fullscreenEnabled && <button type="button" className="icon-button" onClick={toggleFullscreen} disabled={controlsDisabled} aria-label={fullscreen ? '전체화면 종료' : '전체화면'}><Icon name={fullscreen ? 'shrink' : 'expand'} /></button>}
         </div>
+        <p className="shortcut-hint">단축키 · Space 재생/일시정지 · ←/→ {SEEK_STEP}초 이동</p>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}
       </section>

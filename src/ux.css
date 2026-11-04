@@ -15,6 +15,7 @@
 .icon-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--brand); }
 .icon-button:not(:disabled):hover { background: #eef1ff; }
 .control-icon { width: 22px; height: 22px; }
+.shortcut-hint { margin: 10px 4px 0; color: var(--muted); font-size: 13px; }
 
 /* 전체화면에서도 자막 오버레이가 영상 위에 남도록 영상이 아니라 프레임을 전체화면으로 연다. */
 .player-frame:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
@@ -23,4 +24,5 @@
 
 @media (max-width: 520px) {
   .volume-control input[type=range] { width: 80px; }
+  .shortcut-hint { display: none; }
 }
