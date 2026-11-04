@@ -324,7 +324,6 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
           <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
           <button type="button" className="list-toggle" aria-pressed={showList} onClick={toggleList}>{showList ? '자막 목록 숨기기' : '자막 목록 보기'}</button>
         </div>
-        <p className="shortcut-hint">단축키 · Space 재생/일시정지 · ←/→ {SEEK_STEP}초 이동</p>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
         <div className="download-area">
           <span className="download-status">{statusText}{job.expiresAt && ` · 서버 자막 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span>

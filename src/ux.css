@@ -17,7 +17,6 @@
 .control-icon { width: 22px; height: 22px; }
 .list-toggle { margin-left: auto; min-height: 40px; padding: 0 14px; border: 1px solid #babcc2; border-radius: 10px; background: #fff; color: #353942; font-weight: 700; }
 .list-toggle[aria-pressed=false] { border-color: var(--brand); color: var(--brand); }
-.shortcut-hint { margin: 10px 4px 0; color: var(--muted); font-size: 13px; }
 
 /* 전체화면에서도 자막 오버레이가 영상 위에 남도록 영상이 아니라 프레임을 전체화면으로 연다. */
 .player-frame:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
@@ -55,7 +54,6 @@
 }
 @media (max-width: 520px) {
   .volume-control input[type=range] { width: 80px; }
-  .shortcut-hint { display: none; }
 }
 
 /* 플레이어는 직각 모서리, 전체화면 버튼은 영상 오른쪽 아래 */
