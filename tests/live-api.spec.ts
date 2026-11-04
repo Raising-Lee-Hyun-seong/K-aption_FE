@@ -25,7 +25,9 @@ test('Docker backend: upload -> job -> real subtitles -> download', async ({ pag
   await page.screenshot({ path: testInfo.outputPath('watch-desktop.png'), fullPage: true })
   for (const format of ['SRT', 'VTT']) {
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: `${format} 다운로드` }).click()
+    await page.getByRole('button', { name: /자막 다운로드/ }).click()
+    await page.getByRole('button', { name: new RegExp(`^${format}`) }).click()
+    await page.getByRole('button', { name: '다운로드', exact: true }).click()
     expect((await download).suggestedFilename()).toBe(`captions-ko.${format.toLowerCase()}`)
   }
   await page.setViewportSize({ width: 390, height: 844 })

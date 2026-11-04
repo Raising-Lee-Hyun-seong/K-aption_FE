@@ -90,8 +90,8 @@ function UploadPage({ selected, onSelect, onStart, busy, capabilities, savedJob,
     <div className="upload-stack">
       <div className={`dropzone ${dragging ? 'is-dragging' : ''}`} role="button" tabIndex={0} aria-label="강의 파일 선택 또는 드래그 앤 드롭" onClick={pick} onKeyDown={handleKey} onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { event.preventDefault(); setDragging(false) }} onDrop={receive}>
         <div className="icon-tile"><UploadIcon /></div>
-        <h1>{selected ? '선택한 강의 파일' : '영상을 드래그해서 올려주세요'}</h1>
-        {selected ? <><strong className="file-name">{selected.file.name}</strong><p>{selected.duration === null ? '길이 확인 불가 · 서버에서 검사' : formatTime(selected.duration)} · {(selected.file.size / 1024 / 1024).toFixed(1)} MB</p><span className="text-link">다른 파일 선택</span></> : <p>{capabilities ? `${capabilities.allowed_extensions.join(' · ')} / 최대 ${capabilities.max_duration_seconds / 60}분 · ${(capabilities.max_upload_bytes / 1024 ** 3).toFixed(1)} GiB` : '서버 업로드 규칙을 확인해 주세요'}</p>}
+        <h1>{selected ? '선택한 강의 파일' : '영상을 끌어다 놓거나 클릭해서 선택하세요'}</h1>
+        {selected ? <><strong className="file-name">{selected.file.name}</strong><p>{selected.duration === null ? '길이 확인 불가 · 서버에서 검사' : formatTime(selected.duration)} · {(selected.file.size / 1024 / 1024).toFixed(1)} MB</p><span className="text-link">다른 파일 선택</span></> : <><p>{capabilities ? `${capabilities.allowed_extensions.join(' · ')} / 최대 ${capabilities.max_duration_seconds / 60}분 · ${(capabilities.max_upload_bytes / 1024 ** 3).toFixed(1)} GiB` : '서버 업로드 규칙을 확인해 주세요'}</p>{capabilities && <span className="pick-hint" aria-hidden="true">파일 선택</span>}</>}
       </div>
       <input ref={inputRef} className="sr-only" type="file" disabled={busy || !capabilities} accept={capabilities?.allowed_extensions.join(',')} onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} />
       {selected?.duration === null && <p className="inline-note" role="status">브라우저가 재생 길이를 읽지 못했습니다. 서버에서 길이와 음성을 검증합니다.</p>}
@@ -146,11 +146,42 @@ function ModeSwitch({ mode, setMode, className = '' }: { mode: CaptionMode; setM
   return <div className={`mode-switch ${className}`} role="group" aria-label="자막 언어">{([['ko', '한국어'], ['en', 'English'], ['both', '한·영']] as const).map(([value, label]) => <button key={value} aria-pressed={mode === value} className={mode === value ? 'selected' : ''} onClick={() => setMode(value)}>{label}</button>)}</div>
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
+const SEEK_STEP = 5
+const LIST_KEY = 'kaption:show-segment-list'
+const LANG_LABELS: Record<CaptionMode, string> = { ko: '한국어', en: 'English', both: '한·영' }
+const FORMATS = [
+  { value: 'srt', label: 'SRT', hint: '대부분의 동영상 플레이어' },
+  { value: 'vtt', label: 'VTT', hint: '웹 브라우저·온라인 플레이어' },
+] as const
+
+function readListPreference() {
+  try { return localStorage.getItem(LIST_KEY) !== 'hidden' } catch { return true }
+}
+
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return <>{parts.map((part, index) => part.toLowerCase() === query.toLowerCase() ? <mark key={index}>{part}</mark> : part)}</>
+}
+
+function Icon({ name }: { name: 'volume' | 'muted' | 'expand' | 'shrink' }) {
+  const paths = {
+    volume: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" /></>,
+    muted: <><path d="M4 9h4l5-4v14l-5-4H4z" /><path d="M16.5 9.5l5 5m0-5l-5 5" fill="none" /></>,
+    expand: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" />,
+    shrink: <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" />,
+  }
+  return <svg className="control-icon" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="currentColor">{paths[name]}</svg>
+}
+
 function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   selected: SelectedMedia | null; segments: SubtitleSegment[]; job: JobView; savedJob: SavedJob | null
   onSelect: (file: File) => void; onReset: () => void
 }) {
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const manualScrollUntil = useRef(0)
   const [mode, setMode] = useState<CaptionMode>('ko')
@@ -158,23 +189,50 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
   const [duration, setDuration] = useState(selected?.duration ?? 0)
   const [playing, setPlaying] = useState(false)
   const [mediaError, setMediaError] = useState(false)
+  const [rate, setRate] = useState(1)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [showList, setShowList] = useState(readListPreference)
+  const [query, setQuery] = useState('')
+  const [downloadOpen, setDownloadOpen] = useState(false)
+  const [downloadLanguage, setDownloadLanguage] = useState<CaptionMode>('ko')
+  const [downloadFormat, setDownloadFormat] = useState<'srt' | 'vtt'>('srt')
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState('')
   useEffect(() => { setMediaError(false); setCurrent(0); setPlaying(false); setDuration(selected?.duration ?? 0) }, [selected])
-  const download = async (format: 'srt' | 'vtt') => {
+  useEffect(() => { if (mediaRef.current) mediaRef.current.playbackRate = rate }, [rate])
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null && document.fullscreenElement === frameRef.current)
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+  const toggleList = () => setShowList(value => {
+    try { localStorage.setItem(LIST_KEY, value ? 'hidden' : 'shown') } catch { /* Preference is optional. */ }
+    return !value
+  })
+  const openDownload = () => {
+    if (!downloadOpen) { setDownloadLanguage(mode); setDownloadError('') }
+    setDownloadOpen(!downloadOpen)
+  }
+  const download = async () => {
     setDownloadBusy(true); setDownloadError('')
     try {
-      const blob = await api.downloadSubtitles(job.id, mode, format)
+      const blob = await api.downloadSubtitles(job.id, downloadLanguage, downloadFormat)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = url; link.download = `captions-${mode}.${format}`
+      link.href = url; link.download = `captions-${downloadLanguage}.${downloadFormat}`
       document.body.append(link); link.click(); link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setDownloadOpen(false)
     } catch (error) { setDownloadError(messageOf(error)) }
     finally { setDownloadBusy(false) }
   }
   const active = segments.find((segment) => segment.startMs <= current * 1000 && current * 1000 < segment.endMs)
   const activeId = active?.id
+  const search = query.trim()
+  const lowered = search.toLowerCase()
+  const visible = lowered ? segments.filter(segment => segment.sourceText.toLowerCase().includes(lowered) || (segment.targetText ?? '').toLowerCase().includes(lowered)) : segments
 
   useEffect(() => {
     if (activeId && Date.now() > manualScrollUntil.current) cardRefs.current[activeId]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -182,7 +240,9 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
 
   const seek = (seconds: number) => {
     const media = mediaRef.current
-    if (media) { media.currentTime = seconds; setCurrent(seconds) }
+    if (!media) return
+    const target = Math.max(0, Math.min(seconds, duration || seconds))
+    media.currentTime = target; setCurrent(target)
   }
   const togglePlay = async () => {
     const media = mediaRef.current
@@ -190,41 +250,110 @@ function WatchPage({ selected, segments, job, savedJob, onSelect, onReset }: {
     if (media.paused) { try { await media.play() } catch { setMediaError(true) } }
     else media.pause()
   }
+  const changeVolume = (next: number) => {
+    const media = mediaRef.current
+    setVolume(next); setMuted(next === 0)
+    if (media) { media.volume = next; media.muted = next === 0 }
+  }
+  const toggleMute = () => {
+    const media = mediaRef.current
+    const next = !muted
+    setMuted(next)
+    if (media) media.muted = next
+    if (!next && volume === 0) changeVolume(0.5)
+  }
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+      else await frameRef.current?.requestFullscreen()
+    } catch { /* The browser may refuse fullscreen; playback continues. */ }
+  }
+
+  // Keyboard shortcuts stay out of the way while typing or using form controls.
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (!selected || mediaError) return
+      if (event.key === ' ') {
+        if (target?.closest('button')) return
+        event.preventDefault(); void togglePlay()
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const media = mediaRef.current
+        if (!media) return
+        event.preventDefault()
+        seek(media.currentTime + (event.key === 'ArrowRight' ? SEEK_STEP : -SEEK_STEP))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const mediaProps = {
     ref: mediaRef,
     src: selected?.url,
     preload: 'metadata' as const,
     onTimeUpdate: () => setCurrent(mediaRef.current?.currentTime ?? 0),
-    onLoadedMetadata: () => setDuration(mediaRef.current?.duration ?? 0),
+    onLoadedMetadata: () => {
+      const media = mediaRef.current
+      if (!media) return
+      setDuration(media.duration || 0)
+      media.playbackRate = rate; media.volume = volume; media.muted = muted
+    },
     onPlay: () => setPlaying(true),
     onPause: () => setPlaying(false),
     onError: () => setMediaError(true),
   }
+  const controlsDisabled = mediaError || !selected
+  const statusText = job.failedSegments > 0 ? `일부 번역 실패 ${job.failedSegments}개 · 해당 구간은 영어 원문을 표시합니다.` : '자막 처리 완료'
   return <main className="watch-page">
     <div className="watch-toolbar"><div><h1>{selected?.file.name ?? savedJob?.fileName ?? '처리된 강의'}</h1><p>로컬 파일 재생 · 서버 생성 자막</p></div><ModeSwitch mode={mode} setMode={setMode} className="desktop-mode" /><button className="outline" onClick={onReset}>새 파일 올리기</button></div>
-    <div className="download-toolbar"><span>{job.failedSegments > 0 ? `일부 번역 실패 ${job.failedSegments}개 · 해당 구간은 영어 원문을 표시합니다.` : '자막 처리 완료'}{job.expiresAt && ` · 서버 자막 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span><button className="outline" disabled={downloadBusy} onClick={() => download('srt')}>SRT 다운로드</button><button className="outline" disabled={downloadBusy} onClick={() => download('vtt')}>VTT 다운로드</button></div>
-    {downloadError && <p className="media-warning" role="alert">{downloadError}</p>}
-    <div className="watch-layout">
+    <div className={`watch-layout ${showList ? '' : 'list-hidden'}`}>
       <section className="player-column" aria-label="미디어 재생">
-        <div className={`player-frame ${selected?.isAudio ? 'audio-frame' : ''}`}>
-          {!selected ? <div className="missing-media"><p>자막 결과를 불러왔습니다. 재생하려면 동일한 원본 파일을 다시 선택해 주세요.</p><label>원본 파일 선택<input type="file" onChange={event => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} /></label></div> : selected.isAudio ? <><div className="audio-art" aria-hidden="true">♫</div><audio {...mediaProps} /></> : <video {...mediaProps} playsInline onClick={togglePlay} />}
+        <div ref={frameRef} className={`player-frame ${selected?.isAudio ? 'audio-frame' : ''} ${fullscreen ? 'is-fullscreen' : ''}`}>
+          {!selected ? <div className="missing-media"><p>자막 결과를 불러왔습니다. 재생하려면 동일한 원본 파일을 다시 선택해 주세요.</p><label>원본 파일 선택<input type="file" onChange={event => { const file = event.target.files?.[0]; if (file) onSelect(file); event.target.value = '' }} /></label></div> : selected.isAudio ? <><div className="audio-art" aria-hidden="true">♫</div><audio {...mediaProps} /></> : <video {...mediaProps} playsInline onClick={togglePlay} onDoubleClick={toggleFullscreen} />}
           {selected && !playing && !mediaError && <button className="center-play" onClick={togglePlay} aria-label="재생">▶</button>}
+          {selected && !selected.isAudio && !mediaError && document.fullscreenEnabled && <button type="button" className="fullscreen-button" onClick={toggleFullscreen} aria-label={fullscreen ? '전체화면 종료' : '전체화면'} title={fullscreen ? '전체화면 종료 (Esc)' : '전체화면'}><Icon name={fullscreen ? 'shrink' : 'expand'} /></button>}
           {selected && active && !mediaError && <div className="caption-overlay" aria-live="off"><CaptionText segment={active} mode={mode} />{statusLabel(active.status) && <small className="overlay-status">{statusLabel(active.status)}</small>}</div>}
         </div>
         {mediaError && <p className="media-warning" role="alert">이 브라우저에서 파일을 재생할 수 없어요. 파일 형식 또는 코덱을 확인해 주세요. 자막 목록은 살펴볼 수 있습니다.</p>}
-        <div className="playback-controls"><button className="play-control" onClick={togglePlay} disabled={mediaError || !selected} aria-label={playing ? '일시정지' : '재생'}>{playing ? 'Ⅱ' : '▶'}</button><label className="sr-only" htmlFor="seek">재생 위치</label><input id="seek" type="range" min="0" max={duration || 1} step="0.1" value={Math.min(current, duration || 1)} onChange={(event) => seek(Number(event.target.value))} disabled={mediaError || !selected} /><span className="time-readout">{formatTime(current)} / {formatTime(duration)}</span></div>
+        <div className="playback-controls"><button className="play-control" onClick={togglePlay} disabled={controlsDisabled} aria-label={playing ? '일시정지' : '재생'}>{playing ? 'Ⅱ' : '▶'}</button><label className="sr-only" htmlFor="seek">재생 위치</label><input id="seek" type="range" min="0" max={duration || 1} step="0.1" value={Math.min(current, duration || 1)} onChange={(event) => seek(Number(event.target.value))} disabled={controlsDisabled} /><span className="time-readout">{formatTime(current)} / {formatTime(duration)}</span></div>
+        <div className="playback-extras">
+          <label className="speed-control">배속<select value={rate} onChange={event => setRate(Number(event.target.value))} disabled={controlsDisabled}>{SPEEDS.map(speed => <option key={speed} value={speed}>{speed}x</option>)}</select></label>
+          <div className="volume-control"><button type="button" className="icon-button" onClick={toggleMute} disabled={controlsDisabled} aria-label={muted ? '음소거 해제' : '음소거'}><Icon name={muted || volume === 0 ? 'muted' : 'volume'} /></button><label className="sr-only" htmlFor="volume">음량</label><input id="volume" type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={event => changeVolume(Number(event.target.value))} disabled={controlsDisabled} /></div>
+          <button type="button" className="list-toggle" aria-pressed={showList} onClick={toggleList}>{showList ? '자막 목록 숨기기' : '자막 목록 보기'}</button>
+        </div>
         <ModeSwitch mode={mode} setMode={setMode} className="mobile-mode" />
+        <div className="download-area">
+          <span className="download-status">{statusText}{job.expiresAt && ` · 서버 자막 보관 기한 ${new Date(job.expiresAt).toLocaleString('ko-KR')}`}</span>
+          <div className="download-menu">
+            <button className="outline" aria-expanded={downloadOpen} aria-controls="download-panel" onClick={openDownload}>자막 다운로드 {downloadOpen ? '▴' : '▾'}</button>
+            {downloadOpen && <div id="download-panel" className="download-panel" role="group" aria-label="자막 다운로드 설정" onKeyDown={event => { if (event.key === 'Escape') setDownloadOpen(false) }}>
+              <p className="download-label">언어</p>
+              <div className="choice-row">{(['ko', 'en', 'both'] as const).map(value => <button key={value} type="button" aria-label={`다운로드 언어 ${LANG_LABELS[value]}`} aria-pressed={downloadLanguage === value} className={downloadLanguage === value ? 'selected' : ''} onClick={() => setDownloadLanguage(value)}>{LANG_LABELS[value]}</button>)}</div>
+              <p className="download-label">파일 형식</p>
+              <div className="choice-row">{FORMATS.map(format => <button key={format.value} type="button" aria-pressed={downloadFormat === format.value} className={downloadFormat === format.value ? 'selected' : ''} onClick={() => setDownloadFormat(format.value)}><strong>{format.label}</strong><small>{format.hint}</small></button>)}</div>
+              <button className="primary" disabled={downloadBusy} onClick={download}>{downloadBusy ? '준비 중…' : '다운로드'}</button>
+            </div>}
+          </div>
+        </div>
+        {downloadError && <p className="media-warning" role="alert">{downloadError}</p>}
         {segments.length === 0 && <div className="empty-captions" role="status"><strong>표시할 자막이 없어요</strong><p>인식된 음성이 없습니다. 원본 파일은 계속 재생할 수 있어요.</p></div>}
       </section>
-      <aside className="segment-panel" aria-label="자막 목록"><div className="panel-heading"><h2>자막 목록</h2><span>{segments.length}개 구간</span></div>{segments.length ? <div className="segment-scroll" onWheel={() => { manualScrollUntil.current = Date.now() + 3000 }} onTouchMove={() => { manualScrollUntil.current = Date.now() + 3000 }} onPointerDown={() => { manualScrollUntil.current = Date.now() + 3000 }} onKeyDown={() => { manualScrollUntil.current = Date.now() + 3000 }}>{segments.map((segment) => <button key={segment.id} ref={(node) => { cardRefs.current[segment.id] = node }} className={`segment-card ${segment.id === activeId ? 'current' : ''}`} disabled={!selected || mediaError} onClick={() => seek(Math.min(segment.startMs / 1000, duration))} aria-current={segment.id === activeId ? 'true' : undefined}><span className="segment-language-box source-box" lang="en">
+      {showList && <aside className="segment-panel" aria-label="자막 목록">
+        <div className="panel-heading"><h2>자막 목록</h2><span>{search ? `${visible.length}/${segments.length}개 구간` : `${segments.length}개 구간`}</span></div>
+        {segments.length > 0 && <div className="segment-search"><label className="sr-only" htmlFor="segment-search">자막 검색</label><input id="segment-search" type="search" placeholder="자막 검색 (영어·한국어)" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setQuery('') }} /></div>}
+        {segments.length === 0 ? <p className="panel-empty">인식된 자막 구간이 없습니다.</p> : visible.length === 0 ? <p className="panel-empty">'{search}'이(가) 들어간 자막이 없어요.</p> : <div className="segment-scroll" onWheel={() => { manualScrollUntil.current = Date.now() + 3000 }} onTouchMove={() => { manualScrollUntil.current = Date.now() + 3000 }} onPointerDown={() => { manualScrollUntil.current = Date.now() + 3000 }} onKeyDown={() => { manualScrollUntil.current = Date.now() + 3000 }}>{visible.map((segment) => <button key={segment.id} ref={(node) => { cardRefs.current[segment.id] = node }} className={`segment-card ${segment.id === activeId ? 'current' : ''}`} disabled={!selected || mediaError} onClick={() => seek(Math.min(segment.startMs / 1000, duration))} aria-current={segment.id === activeId ? 'true' : undefined}><span className="segment-language-box source-box" lang="en">
           <span className="segment-box-heading"><span className="segment-time">{formatTime(segment.startMs / 1000)}</span><span>English</span></span>
-          <span className="segment-source">{segment.sourceText}</span>
+          <span className="segment-source"><Highlight text={segment.sourceText} query={search} /></span>
         </span>
         <span className="segment-language-box translation-box" lang={segment.targetText ? 'ko' : 'en'}>
           <span className="segment-box-heading">{segment.targetText ? '한국어 번역' : '영어 원문 유지'}</span>
-          <span className="segment-target">{segment.targetText ?? segment.sourceText}</span>
+          <span className="segment-target"><Highlight text={segment.targetText ?? segment.sourceText} query={search} /></span>
           {statusLabel(segment.status) && <span className={`status-pill ${segment.status}`}>{statusLabel(segment.status)}</span>}
-        </span></button>)}</div> : <p className="panel-empty">인식된 자막 구간이 없습니다.</p>}</aside>
+        </span></button>)}</div>}
+      </aside>}
     </div>
   </main>
 }

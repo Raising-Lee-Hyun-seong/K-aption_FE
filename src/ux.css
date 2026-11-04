@@ -1,0 +1,73 @@
+/* UX 개선: 업로드 안내, 재생 컨트롤, 자막 다운로드, 자막 목록 토글·검색 */
+
+/* 모든 모서리 곡률을 유튜브 플레이어와 같은 12px 하나로 통일한다. 원형(50%)과 전체화면(0)은 예외. */
+:root { --radius: 12px; }
+
+/* 업로드 영역은 마우스를 올리기 전에도 클릭 가능한 영역으로 보이게 한다. */
+.dropzone { border-color: #c9d2ea; margin-bottom: 22px; }
+.pick-hint { display: inline-flex; align-items: center; margin-top: 18px; padding: 10px 20px; border: 1px solid var(--brand); border-radius: var(--radius); color: var(--brand); font-size: 15px; font-weight: 700; background: #fff; }
+.dropzone:hover .pick-hint { background: #f4f6ff; }
+
+/* 재생 컨트롤 두 번째 줄: 배속·음량·전체화면·자막 목록 토글 */
+.playback-controls { padding-bottom: 8px; }
+.playback-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 0 4px; }
+.speed-control { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #4d5260; }
+.speed-control select { height: 40px; padding: 0 10px; border: 1px solid #babdc5; border-radius: var(--radius); background: #fff; color: #343943; }
+.volume-control { display: inline-flex; align-items: center; gap: 6px; }
+.volume-control input[type=range] { width: 110px; accent-color: var(--brand); cursor: pointer; }
+.icon-button { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--brand); }
+.icon-button:not(:disabled):hover { background: #eef1ff; }
+.control-icon { width: 22px; height: 22px; }
+.list-toggle { margin-left: auto; min-height: 40px; padding: 0 14px; border: 1px solid #babcc2; border-radius: var(--radius); background: #fff; color: #353942; font-weight: 700; }
+.list-toggle[aria-pressed=false] { border-color: var(--brand); color: var(--brand); }
+
+/* 전체화면에서도 자막 오버레이가 영상 위에 남도록 영상이 아니라 프레임을 전체화면으로 연다. */
+.player-frame:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; background: #000; }
+.player-frame:fullscreen video { background: #000; }
+.player-frame:fullscreen .caption-overlay > span { font-size: clamp(20px, 2.4vw, 34px); }
+
+/* 자막 목록을 숨기면 영상이 전체 폭을 쓴다. */
+.watch-layout.list-hidden { grid-template-columns: 1fr; }
+.watch-layout.list-hidden .player-column { max-width: 1100px; width: 100%; margin: 0 auto; }
+
+/* 자막 다운로드: 플레이어 아래, 버튼 하나에서 언어·형식 선택 */
+.download-area { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #e5e7ec; }
+.download-status { flex: 1; min-width: 200px; color: #666b75; font-size: 14px; line-height: 1.6; padding-top: 11px; }
+.download-menu { position: relative; }
+.download-menu > .outline { min-height: 44px; padding: 0 18px; }
+.download-panel { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 5; width: 320px; padding: 16px; border: 1px solid #dfe2ea; border-radius: var(--radius); background: #fff; box-shadow: 0 14px 40px rgba(30, 45, 90, .14); }
+.download-label { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #4d5260; }
+.choice-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.choice-row button { flex: 1; min-height: 42px; padding: 6px 8px; border: 1px solid #babcc2; border-radius: var(--radius); background: #fff; color: #353942; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.choice-row button.selected { border-color: var(--brand); background: #eef1ff; color: var(--brand); font-weight: 700; }
+.choice-row small { font-size: 11px; font-weight: 400; color: #73777f; }
+.download-panel > .primary { width: 100%; min-height: 46px; }
+
+/* 자막 검색 */
+.segment-search { padding: 0 2px 14px; }
+.segment-search input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid #c4c7ce; border-radius: var(--radius); background: #fff; color: #262a32; }
+.segment-language-box mark { background: #ffe58a; color: inherit; border-radius: var(--radius); padding: 0 1px; }
+
+@media (max-width: 800px) {
+  .list-toggle { margin-left: 0; }
+  .download-panel { position: static; width: 100%; margin-top: 10px; }
+  .download-menu { width: 100%; }
+  .download-menu > .outline { width: 100%; }
+  .download-status { padding-top: 0; }
+}
+@media (max-width: 520px) {
+  .volume-control input[type=range] { width: 80px; }
+}
+
+/* 전체화면 버튼은 영상 오른쪽 아래 */
+.player-frame { border-radius: var(--radius); }
+.player-frame video { border-radius: 0; }
+.player-frame:fullscreen { border-radius: 0; }
+.fullscreen-button { position: absolute; right: 12px; bottom: 12px; z-index: 3; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius); background: rgba(8, 10, 15, .55); color: #fff; }
+.fullscreen-button:hover { background: rgba(8, 10, 15, .8); }
+.fullscreen-button .control-icon { width: 22px; height: 22px; }
+.caption-overlay { left: max(7%, 64px); right: max(7%, 64px); }
+@media (max-width: 800px) {
+  .player-frame { border-radius: var(--radius); }
+  .fullscreen-button { right: 8px; bottom: 8px; width: 36px; height: 36px; }
+}
