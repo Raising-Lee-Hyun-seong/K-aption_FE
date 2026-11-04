@@ -56,13 +56,15 @@
   .volume-control input[type=range] { width: 80px; }
 }
 
-/* 플레이어는 직각 모서리, 전체화면 버튼은 영상 오른쪽 아래 */
-.player-frame, .player-frame video { border-radius: 0; }
+/* 플레이어 모서리는 유튜브와 같은 12px, 전체화면 버튼은 영상 오른쪽 아래 */
+.player-frame { border-radius: 12px; }
+.player-frame video { border-radius: 0; }
+.player-frame:fullscreen { border-radius: 0; }
 .fullscreen-button { position: absolute; right: 12px; bottom: 12px; z-index: 3; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 6px; background: rgba(8, 10, 15, .55); color: #fff; }
 .fullscreen-button:hover { background: rgba(8, 10, 15, .8); }
 .fullscreen-button .control-icon { width: 22px; height: 22px; }
 .caption-overlay { left: max(7%, 64px); right: max(7%, 64px); }
 @media (max-width: 800px) {
-  .player-frame { border-radius: 0; }
+  .player-frame { border-radius: 12px; }
   .fullscreen-button { right: 8px; bottom: 8px; width: 36px; height: 36px; }
 }
